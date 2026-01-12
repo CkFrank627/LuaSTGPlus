@@ -3,27 +3,14 @@ name: Build Windows
 on:
   push:
     branches: [ master ]
-    paths:
-      - ".github/workflows/build_windows.yaml"
-      - "**.c"
-      - "**.h"
-      - "**.hpp"
-      - "**.cpp"
-      - "**.cmake"
-      - "**.patch"
-      - "**.ico"
-      - "**.rc"
-      - "**.json"
-      - "**.hpp.in"
-      - "**.py"
-      - "**/CMakeLists.txt"
+    
   repository_dispatch:
     types: [ update ]
 
 jobs:
   build_windows:
     #runs-on: windows-2022
-    runs-on: self-hosted
+    runs-on: windows-2022
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
