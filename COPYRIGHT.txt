@@ -1,4 +1,5 @@
 # Exhaustive licensing information for files in the LuaSTGPlus repository
+#
 # =========================================================================
 #
 # This file aims at documenting the copyright and license for every source
