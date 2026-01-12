@@ -22,13 +22,11 @@ on:
 
 jobs:
   build_windows:
-    #runs-on: windows-2022
-    runs-on: self-hosted
+    runs-on: windows-2022
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
@@ -36,19 +34,27 @@ jobs:
       - name: Prepare
         shell: powershell
         run: |
-          # Set git tag
-          $PROJECT_TAG=git describe --tags --dirty --match "v*"
+          # Set git tag (fallback if repo has no tags)
+          $PROJECT_TAG = (git describe --tags --dirty --match "v*" 2>$null)
+          if (-not $PROJECT_TAG) { $PROJECT_TAG = ("untagged-" + $env:GITHUB_SHA).Substring(0, 20) }
           Add-Content -Path $env:GITHUB_ENV -Value "PROJECT_TAG=$PROJECT_TAG"
+
           # Find compiler
-          $VCVAR_PATH=vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\**\vcvars64.bat"
+          $VCVAR_PATH = vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\**\vcvars64.bat"
           if (-Not (Test-Path -Path "$VCVAR_PATH")) { Write-Error "VC++ compiler not found" -ErrorAction Stop }
           Add-Content -Path $env:GITHUB_ENV -Value "VCVAR_PATH=$VCVAR_PATH"
-          # Create CPM cache folder
-          mkdir /cpm_cache -ErrorAction SilentlyContinue
-          Add-Content -Path $env:GITHUB_ENV -Value "CPM_SOURCE_CACHE=/cpm_cache"
+
+          # Create CPM cache folder (use a proper Windows path)
+          $CPM_CACHE = Join-Path $env:RUNNER_TEMP "cpm_cache"
+          New-Item -ItemType Directory -Force $CPM_CACHE | Out-Null
+          Add-Content -Path $env:GITHUB_ENV -Value "CPM_SOURCE_CACHE=$CPM_CACHE"
+
+          # Clean possibly broken libpng cache (fix missing scripts/options.awk)
+          Remove-Item -Recurse -Force (Join-Path $CPM_CACHE "libpng") -ErrorAction SilentlyContinue
+
           # Create intermediate folders
-          mkdir cmake-build-x64
-          mkdir dist
+          New-Item -ItemType Directory -Force "cmake-build-x64" | Out-Null
+          New-Item -ItemType Directory -Force "dist" | Out-Null
 
       - name: Build x64 Shipping
         shell: cmd
@@ -59,6 +65,7 @@ jobs:
           ninja -j %NUMBER_OF_PROCESSORS%
 
       - name: Copy shipping build output
+        shell: cmd
         run: |
           copy cmake-build-x64\src\v2\LuaSTGPlus2.exe dist\LuaSTGPlus2.exe
 
@@ -71,11 +78,12 @@ jobs:
           ninja -j %NUMBER_OF_PROCESSORS%
 
       - name: Copy development build output
+        shell: cmd
         run: |
           copy cmake-build-x64\src\v2\LuaSTGPlus2.exe dist\LuaSTGPlus2.dev.exe
-          
-      - uses: actions/upload-artifact@v3
+
+      - uses: actions/upload-artifact@v4
         with:
           name: LuaSTGPlus2-${{ env.PROJECT_TAG }}
           path: |
-             dist/*.exe
+            dist/*.exe
