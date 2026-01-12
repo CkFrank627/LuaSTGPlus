@@ -3,48 +3,52 @@ name: Build Windows
 on:
   push:
     branches: [ master ]
-    
+    paths:
+      - ".github/workflows/build_windows.yaml"
+      - "**.c"
+      - "**.h"
+      - "**.hpp"
+      - "**.cpp"
+      - "**.cmake"
+      - "**.patch"
+      - "**.ico"
+      - "**.rc"
+      - "**.json"
+      - "**.hpp.in"
+      - "**.py"
+      - "**/CMakeLists.txt"
   repository_dispatch:
     types: [ update ]
 
 jobs:
   build_windows:
     #runs-on: windows-2022
-    runs-on: windows-2022
+    runs-on: self-hosted
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           submodules: recursive
           fetch-depth: 0
 
-    - name: Prepare
-      shell: powershell
-      run: |
-        # Set git tag (兜底，防止没有 tag 时出问题)
-        $PROJECT_TAG = (git describe --tags --dirty --match "v*" 2>$null)
-        if (-not $PROJECT_TAG) { $PROJECT_TAG = ("untagged-" + $env:GITHUB_SHA).Substring(0, 20) }
-        Add-Content -Path $env:GITHUB_ENV -Value "PROJECT_TAG=$PROJECT_TAG"
-    
-        # Find compiler
-        $VCVAR_PATH = vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\**\vcvars64.bat"
-        if (-Not (Test-Path -Path "$VCVAR_PATH")) { Write-Error "VC++ compiler not found" -ErrorAction Stop }
-        Add-Content -Path $env:GITHUB_ENV -Value "VCVAR_PATH=$VCVAR_PATH"
-    
-        # Create CPM cache folder (用 Windows 路径，避免 /cpm_cache 导致缓存异常)
-        $CPM_CACHE = Join-Path $env:RUNNER_TEMP "cpm_cache"
-        New-Item -ItemType Directory -Force $CPM_CACHE | Out-Null
-        Add-Content -Path $env:GITHUB_ENV -Value "CPM_SOURCE_CACHE=$CPM_CACHE"
-    
-        # 清理可能损坏的 libpng 缓存（解决 options.awk 找不到的问题）
-        Remove-Item -Recurse -Force (Join-Path $CPM_CACHE "libpng") -ErrorAction SilentlyContinue
-    
-        # Create intermediate folders
-        New-Item -ItemType Directory -Force "cmake-build-x64" | Out-Null
-        New-Item -ItemType Directory -Force "dist" | Out-Null
-
+      - name: Prepare
+        shell: powershell
+        run: |
+          # Set git tag
+          $PROJECT_TAG=git describe --tags --dirty --match "v*"
+          Add-Content -Path $env:GITHUB_ENV -Value "PROJECT_TAG=$PROJECT_TAG"
+          # Find compiler
+          $VCVAR_PATH=vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\**\vcvars64.bat"
+          if (-Not (Test-Path -Path "$VCVAR_PATH")) { Write-Error "VC++ compiler not found" -ErrorAction Stop }
+          Add-Content -Path $env:GITHUB_ENV -Value "VCVAR_PATH=$VCVAR_PATH"
+          # Create CPM cache folder
+          mkdir /cpm_cache -ErrorAction SilentlyContinue
+          Add-Content -Path $env:GITHUB_ENV -Value "CPM_SOURCE_CACHE=/cpm_cache"
+          # Create intermediate folders
+          mkdir cmake-build-x64
+          mkdir dist
 
       - name: Build x64 Shipping
         shell: cmd
@@ -70,7 +74,7 @@ jobs:
         run: |
           copy cmake-build-x64\src\v2\LuaSTGPlus2.exe dist\LuaSTGPlus2.dev.exe
           
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: LuaSTGPlus2-${{ env.PROJECT_TAG }}
           path: |
